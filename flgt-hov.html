@@ -682,6 +682,7 @@ async function boot(){
 }
 A=seed();R();
 boot();
+boot();
 </script>
 
 <script>
@@ -781,13 +782,18 @@ del=function(id){const i=A.findIndex(x=>x.id==id);if(i<0)return;const a=A[i];A.s
 
 /* 8) إصلاح: addP2 كانت تكتب \n حرفيًا بدل سطر جديد */
 const fixNL=()=>{let c=false;A.forEach(a=>['steps','notes'].forEach(k=>{if(a[k]&&a[k].indexOf('\\n')>-1){a[k]=a[k].split('\\n').join('\n');c=true}}));return c};
-const _addP2=addP2;addP2=function(){const c=_addP2();fixNL();return c};
+/* تصحيح الأدوار بحسب هيكل المدرسة (يُعدَّل هذا الجدول فقط إن تغيّر شيء) */
+const ROLE_MAP={'قائد المدرسة':'مدير المدرسة','وكيل الشؤون التعليمية':'وكيل شؤون المعلمين','وكيل الشؤون المدرسية':'وكيل شؤون الطلاب','فريق التقويم الذاتي':'فريق التميز','لجنة التميز':'فريق التميز'};
+const ROLE_DROP=new Set(['المسؤول الصحي','قادة الأقسام','قائد القسم','إدارة التعليم','لجنة الشراكة المجتمعية']);
+function fixRoleStr(s){const seen=new Set(),out=[];String(s||'').split(/[،,\n]/).map(x=>x.trim()).filter(Boolean).forEach(x=>{if(ROLE_DROP.has(x))return;x=ROLE_MAP[x]||x;if(!seen.has(x)){seen.add(x);out.push(x)}});return out.join('، ')}
+function fixRoles(list){let c=0;list.forEach(a=>['owner','committees','providerRole'].forEach(k=>{if(typeof a[k]!=='string')return;const n=fixRoleStr(a[k]);if(n!==a[k]){a[k]=n;c++}}));return c}
+const _addP2=addP2;addP2=function(){const n0=A.length;const c=_addP2();fixNL();fixRoles(A.slice(n0));return c};
 
 /* 9) الصياغة الآلية لا تمسّ إجراءً عدّله المستخدم يدويًا */
 const _RW=RW;RW=function(){const ed=A.filter(a=>a.ed&&!a.rw);ed.forEach(a=>{a.rw=1});const c=_RW();ed.forEach(a=>{delete a.rw});return c};
 
 /* 10) إعادة الضبط تعيد المعرّفات الثابتة */
-const _reset=reset;reset=function(){const b=A;_reset();if(A!==b){CFG.ids=0;if(stabilize()){save();saveCfg();R()}}};
+const _reset=reset;reset=function(){const b=A;_reset();if(A!==b){fixRoles(A);CFG.ids=0;stabilize();save();saveCfg();R()}};
 
 /* 11) النسخة الاحتياطية تتضمن الإعدادات وتسجّل تاريخ آخر نسخة */
 bk=function(){dl('backup-'+stamp()+'.json',JSON.stringify({app:'flgt-hov',v:3,date:new Date().toISOString(),actions:A,evaluation:T,follow:FU,apply:FA,config:CFG},null,1),'application/json');
@@ -898,6 +904,7 @@ window.up_sugT=function(){const rows=EV.filter(r=>r[4]<90&&!(T[r[0]]&&T[r[0]].t!
 /* ---------- حقن عناصر الواجهة ---------- */
 function mount(){if($('up_dash'))return;
   $('dmiss').insertAdjacentHTML('afterend','<div id="up_dash"></div>');
+  document.querySelectorAll('.g i').forEach(i=>{if(i.textContent.trim()==='قائد المدرسة')i.textContent='مدير المدرسة'});
   $('tb').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','نسبة الإنجاز','المسؤول','البداية','تاريخ الإنجاز','الاستحقاق','التحديث','إجراءات'].map(x=>'<th>'+x+'</th>').join('');
   $('rt').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','الإنجاز','الاستحقاق','التحديث',''].map(x=>'<th>'+x+'</th>').join('');
   $('fs').insertAdjacentHTML('beforeend','<option>متأخرة</option>');
@@ -906,6 +913,9 @@ function mount(){if($('up_dash'))return;
   $('ev').querySelector('.note').insertAdjacentHTML('afterend','<div class="tools"><button class="b s" type="button" onclick="up_sugT()">اقتراح مستهدفات متدرجة للبنود دون 90%</button></div>');
   document.body.insertAdjacentHTML('beforeend','<div id="up_toast" class="np" role="status" aria-live="polite"></div>')}
 mount();
+/* «لجنة التميز» ← «فريق التميز» في النصوص الثابتة ونصوص مسؤولية التنفيذ المقترحة */
+SG.forEach(x=>{x[1]=x[1].replace(/لجنة التميز/g,'فريق التميز')});
+(function(){const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while((n=w.nextNode())){const p=n.parentNode&&n.parentNode.nodeName;if(p==='SCRIPT'||p==='STYLE'||p==='TEXTAREA')continue;if(n.nodeValue.indexOf('لجنة التميز')>-1)n.nodeValue=n.nodeValue.replace(/لجنة التميز/g,'فريق التميز')}})();
 
 /* ---------- التهيئة بعد اكتمال تحميل البيانات الأصلي ---------- */
 (async function init(){try{
@@ -915,6 +925,7 @@ mount();
   let ch=fixNL();
   A.forEach(a=>{if(a.due===undefined){a.due='';ch=true}if(a.upd===undefined){a.upd='';ch=true}});
   if(stabilize())ch=true;
+  if((CFG.roles||0)<2){if(fixRoles(A))ch=true;CFG.roles=2}
   if(ch)save();saveCfg();
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
   R();dash();

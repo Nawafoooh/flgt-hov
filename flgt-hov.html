@@ -483,11 +483,11 @@ const TP={'التهيئة':{n:'الحاجة إلى معالجة أوجه الق�
 const NXT={'التهيئة':'نحو مستوى الانطلاق (50% فأكثر)','الانطلاق':'نحو مستوى التقدم (75% فأكثر)','التقدم':'نحو مستوى التميز (90% فأكثر)','التميز':'المحافظة على مستوى التميز واستدامته'};
 function DM(c){if(c=='1-2-1-5'||/^1-3/.test(c)||c=='3-2-1-4')return'الأنشطة المدرسية';if(/^(1-2|1-5|3-2)/.test(c))return'التوجيه الطلابي';if(/^1-[14]/.test(c))return'التطوير المهني';if(/^2/.test(c))return'التدريس';if(/^3-1/.test(c))return'نواتج التعلم';return'البيئة المدرسية'}
 const gref=c=>Object.keys(CODE).find(k=>CODE[k]==c)||'';
-function gnInit(){if(!$('gi'))return;const extra=Object.keys(ENV_AGD).filter(c=>!IT[c]);$('gi').innerHTML=FD.map(([dn,ss])=>'<optgroup label="'+dn+'">'+ss.map(([sn,ad,is])=>is.map(([c,t])=>'<option value="'+c+'">'+c+' — '+h(t)+'</option>').join('')).join('')+'</optgroup>').join('')+(extra.length?'<optgroup label="البيئة المدرسية">'+extra.map(c=>'<option value="'+c+'">'+c+' — '+h(ENV_NAMES[c])+'</option>').join('')+'</optgroup>':'');
+function gnInit(withEnv){if(!$('gi'))return;const extra=withEnv?Object.keys(ENV_AGD):[];$('gi').innerHTML=FD.map(([dn,ss])=>'<optgroup label="'+dn+'">'+ss.map(([sn,ad,is])=>is.map(([c,t])=>'<option value="'+c+'">'+c+' — '+h(t)+'</option>').join('')).join('')+'</optgroup>').join('')+(extra.length?'<optgroup label="البيئة المدرسية">'+extra.map(c=>'<option value="'+c+'">'+c+' — '+h(ENV_NAMES[c])+'</option>').join('')+'</optgroup>':'');
 $('gm').innerHTML=D.map(x=>'<option>'+x+'</option>').join('');gnI()}
 function gnI(){const c=$('gi').value,r=EV.find(x=>x[0]==gref(c));$('gs').value=r?r[4]:'';$('go').value=sug(c)=='—'?'':sug(c);$('gm').value=DM(c);gnS()}
 function gnS(){const v=$('gs').value;if(v!=='')$('gl').value=LV(+v);gnG()}
-function gnG(){const c=$('gi').value,t=TP[$('gl').value]||TP['التقدم'],x=XP[c]||'';$('gn1').value=t.n.replace('{X}',x);$('gn2').value=t.a.replace('{X}',x);$('gn3').value=t.m;gnH()}
+function gnG(){const c=$('gi').value,t=TP[$('gl').value]||TP['التقدم'],x=XP[c]||ENV_NAMES[c]||'';$('gn1').value=t.n.replace('{X}',x);$('gn2').value=t.a.replace('{X}',x);$('gn3').value=t.m;gnH()}
 function gnH(){const L=TP[$('gl').value]?$('gl').value:'التقدم',s=$('gs').value,t=$('gt').value;let m='الاتجاه المرشد في الدليل: '+NXT[L]+'.';if(t!==''&&(+t<=+s||(+t>=95&&+s<90)))m+=' ⚠ المستهدف دون الحالي أو قفزة غير واقعية؛ يُفضَّل مستهدف متدرج.';$('gh').textContent=m}
 function gnBoxes(){return[['الدرجة المستهدفة',$('gt').value?$('gt').value+'%':'لم تُحدَّد'],['مدة الإنجاز',$('gdur').value||'—'],['مسؤولية التنفيذ',$('go').value||'—'],['وصف الاحتياج',$('gn1').value],['إجراء التحسين',$('gn2').value],['آليات التنفيذ',$('gn3').value]]}
 function gnCp(){const t=gnBoxes().map(([a,b])=>a+': '+b).join('\n');try{navigator.clipboard.writeText(t).then(()=>alert('تم النسخ'),()=>prompt('انسخ النص:',t))}catch(e){prompt('انسخ النص:',t)}}
@@ -622,6 +622,7 @@ const ENV_AGD={
 '4-2-1-4':['ظهور المرافق والتجهيزات المستخدمة في المدرسة بحالة تشغيلية جيدة.','خلو الفصول والمعامل والمرافق من أعطال ظاهرة تؤثر في استخدامها.','معالجة الأعطال أو التلفيات الظاهرة في المبنى وتجهيزاته.','جاهزية المرافق والتجهيزات للاستخدام الفعلي أثناء اليوم الدراسي.','عدم وجود ملاحظات أو أعطال ظاهرة ومتكررة أو مرافق متوقفة عن الاستخدام بسبب أعطال.','ظهور مستوى مناسب من العناية بالمبنى وتجهيزاته من خلال سلامة المرافق ومعالجة الأعطال.'],
 '4-2-1-5':['نظافة الممرات والساحات والمرافق المدرسية أثناء الزيارة.','نظافة الفصول والمعامل وتجهيزاتها.','نظافة دورات المياه وأماكن تناول الطعام.','توافر حاويات مناسبة للمخلفات في المواقع المستخدمة.','خلو المرافق من تراكم المخلفات أو الأوساخ الظاهرة.','ظهور مستوى متسق من النظافة في مختلف مرافق المبنى المدرسي.']};
 Object.assign(AGD,ENV_AGD);
+gnInit(true);
 Object.assign(AGD,TEACHING_AGD);
 
 const RDN=['','منخفضة','متوسطة','مرتفعة','مكتملة'],LVI=['التهيئة','الانطلاق','التقدم','التميز'];
@@ -679,6 +680,7 @@ async function boot(){
   R();
  }catch(e){console.error(e);alert('تعذر تهيئة قاعدة البيانات IndexedDB. تحقق من دعم المتصفح ثم أعد تحميل الصفحة.');A=seed();R()}
 }
+A=seed();R();
 boot();
 </script>
 </body>

@@ -709,6 +709,9 @@ const daysTo=a=>dd(todayISO(),dueOf(a));
 const short=s=>{s=String(s||'');return s.length>45?s.slice(0,45)+'…':s};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const owners=a=>String(a.owner||'').split(/[،,\n]/).map(x=>x.trim()).filter(Boolean);
+const BASE_ROLES=['مدير المدرسة','وكيل شؤون الطلاب','وكيل شؤون المعلمين','الموجه الطلابي','رائد النشاط','منسق الموهوبين','المعلمون','معلمو المواد المستهدفة','فريق التميز'];
+const roleList=()=>[...new Set(BASE_ROLES.concat(A.flatMap(owners)))];
+const SEL=new Set();
 function hash(s){let x=5381;for(let i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return(x>>>0).toString(36)}
 const EVY='يوجد شاهد (محفوظ في Google Drive)';
 const hasEv=a=>!!((a.evidence||'').trim()||(a.files||[]).length);
@@ -758,8 +761,8 @@ function dueCell(a){const d=dueOf(a);if(!d)return'—';if(a.status==='منفذ')
   return d+(n<0?' <span class="lv" style="background:#a63232">متأخر '+(-n)+' يوم</span>':n<=14?' <span class="lv" style="background:#e36c0a">خلال '+n+' يوم</span>':'')}
 let RT;
 R=function(){const l=filt();
-  $('tb').innerHTML=l.map(a=>'<tr><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><span class="st '+a.status+'">'+a.status+'</span></td><td>'+a.progress+'%</td><td>'+h(a.owner)+'</td><td>'+(a.start||'—')+'</td><td>'+(a.end||'—')+'</td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td style="white-space:nowrap"><button class="b s" onclick="edit(\''+a.id+'\')">تعديل</button> <button class="b d" onclick="del(\''+a.id+'\')">حذف</button></td></tr>').join('')||'<tr><td colspan="10">لا نتائج</td></tr>';
-  $('cnt').textContent='المعروض '+l.length+' من '+A.length;clearTimeout(RT);RT=setTimeout(()=>dash(),200)};
+  $('tb').innerHTML=l.map(a=>'<tr><td><input type="checkbox" aria-label="تحديد"'+(SEL.has(a.id)?' checked':'')+' onchange="up_sel(\''+a.id+'\',this.checked)"></td><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><span class="st '+a.status+'">'+a.status+'</span></td><td>'+a.progress+'%</td><td>'+h(a.owner)+'</td><td>'+(a.start||'—')+'</td><td>'+(a.end||'—')+'</td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td style="white-space:nowrap"><button class="b s" onclick="edit(\''+a.id+'\')">تعديل</button> <button class="b d" onclick="del(\''+a.id+'\')">حذف</button></td></tr>').join('')||'<tr><td colspan="11">لا نتائج</td></tr>';
+  $('cnt').textContent='المعروض '+l.length+' من '+A.length;updSel();clearTimeout(RT);RT=setTimeout(()=>dash(),200)};
 
 /* 5) حفظ الإجراء: يحفظ علامات الصياغة الآلية، ويختم تاريخ التحديث */
 sv=function(e){e.preventDefault();const fd=new FormData($('fm')),o={id:cur?cur.id:uid()};
@@ -779,6 +782,13 @@ edit=function(id){_edit(id);const f=$('fm');if(!f)return;const st=f.elements['st
   if(fb){fb.innerHTML='<label>هل يوجد شاهد؟ (الشواهد محفوظة في Google Drive ولا تُرفع هنا)<select id="up_ev"><option value="0">لا</option><option value="1">نعم، يوجد شاهد</option></select></label>';
     $('up_ev').value=(cur&&hasEv(cur))?'1':'0';
     const ee=f.elements['evidence'];if(ee)ee.addEventListener('input',()=>{if(ee.value.trim())$('up_ev').value='1'})}
+  const oi=f.elements['owner'];
+  if(oi&&oi.closest('label')){const box=document.createElement('div');box.className='chk';box.style.marginTop='6px';const cbs=[];
+    const paint=()=>{const t=owners({owner:oi.value});cbs.forEach(([r,c])=>{c.checked=t.includes(r)})};
+    roleList().forEach(r=>{const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';
+      c.onchange=()=>{let t=owners({owner:oi.value});t=c.checked?(t.includes(r)?t:t.concat(r)):t.filter(x=>x!==r);oi.value=t.join('، ')};
+      l.appendChild(c);l.appendChild(document.createTextNode(' '+r));box.appendChild(l);cbs.push([r,c])});
+    oi.closest('label').insertAdjacentElement('afterend',box);oi.addEventListener('input',paint);paint()}
   st.addEventListener('change',()=>{if(st.value==='منفذ')pg.value=100;else if(st.value==='لم ينفذ')pg.value=0;fill()});
   pg.addEventListener('change',()=>{const p=Math.round(+pg.value||0);st.value=p<=0?'لم ينفذ':p>=100?'منفذ':'جارٍ';fill()})};
 
@@ -811,7 +821,7 @@ RM=function(){const sel=$('rs');if(!sel||!$('rt'))return;const cu=sel.value,rs=[
   const l=cu?A.filter(a=>tok(a).includes(cu)):[],bad=l.filter(a=>miss(a).length),lt=l.filter(isLate);
   $('rc').innerHTML=cu?'<div class="card">إجراءاتي<b>'+l.length+'</b></div>'+S.map(x=>'<div class="card">'+x+'<b>'+l.filter(a=>a.status==x).length+'</b></div>').join('')+'<div class="card">متوسط الإنجاز<b>'+avg(l)+'%</b></div><div class="card'+(lt.length?' bad':'')+'">متأخرة<b>'+lt.length+'</b></div><div class="card">تحتاج تحديثًا<b>'+bad.length+'</b></div>':'';
   const rk=a=>(isLate(a)?2:0)+(miss(a).length?1:0);
-  $('rt').innerHTML=cu?l.slice().sort((a,b)=>rk(b)-rk(a)).map(a=>'<tr class="up-q"><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><select onchange="up_qu(\''+a.id+'\',\'status\',this.value)">'+S.map(x=>'<option'+(x==a.status?' selected':'')+'>'+x+'</option>').join('')+'</select></td><td><input type="number" min="0" max="100" style="width:80px" value="'+a.progress+'" onchange="up_qu(\''+a.id+'\',\'progress\',this.value)"></td><td><select onchange="up_qu(\''+a.id+'\',\'ev\',this.value)"><option value="0">لا</option><option value="1"'+(hasEv(a)?' selected':'')+'>نعم</option></select></td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td><button class="b s" onclick="edit(\''+a.id+'\')">تحديث كامل</button></td></tr>').join(''):'<tr><td colspan="8">اختر دورًا لعرض إجراءاته.</td></tr>'};
+  $('rt').innerHTML=cu?l.slice().sort((a,b)=>rk(b)-rk(a)).map(a=>'<tr class="up-q"><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><select onchange="up_qu(\''+a.id+'\',\'status\',this.value)">'+S.map(x=>'<option'+(x==a.status?' selected':'')+'>'+x+'</option>').join('')+'</select></td><td><input type="number" min="0" max="100" style="width:80px" value="'+a.progress+'" onchange="up_qu(\''+a.id+'\',\'progress\',this.value)"></td><td><select onchange="up_qu(\''+a.id+'\',\'ev\',this.value)"><option value="0">لا</option><option value="1"'+(hasEv(a)?' selected':'')+'>نعم</option></select></td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td><select onchange="up_move(\''+a.id+'\',this.value)"><option value="">نقل إلى…</option>'+roleList().filter(r=>r!==cu).map(r=>'<option>'+h(r)+'</option>').join('')+'</select></td><td><button class="b s" onclick="edit(\''+a.id+'\')">تحديث كامل</button></td></tr>').join(''):'<tr><td colspan="9">اختر دورًا لعرض إجراءاته.</td></tr>'};
 window.up_qu=function(id,k,v){const a=A.find(x=>x.id==id);if(!a)return;const old={status:a.status,progress:a.progress,start:a.start,end:a.end,upd:a.upd,evidence:a.evidence};
   if(k==='ev'){if(v==='1'){if(!(a.evidence||'').trim())a.evidence=EVY}else a.evidence='';a.upd=todayISO();a.ed=1;save();dash();toast('تم تحديث الشاهد');return}
   if(k==='status')a.status=v;else a.progress=v;
@@ -857,7 +867,7 @@ function UP(){const c=$('up_dash');if(!c)return;const t=todayISO(),p=pulse(),v=v
   '<h3>أقرب الاستحقاقات والمتأخرات</h3><div class="tw">'+lateTable(0,8)+'</div>'+
   '<h3>حمل المسؤولين</h3><div class="tw">'+roleTable(0)+'</div>'}
 
-const _dash=dash;dash=function(){_dash();UP()};
+const _dash=dash;dash=function(){_dash();UP();fillRoles()};
 
 window.up_goLate=function(){document.querySelector('#nav button[data-t="reg"]').click();$('fs').value='متأخرة';R()};
 window.up_goRole=function(r){document.querySelector('#nav button[data-t="me"]').click();$('rs').value=r;RM()};
@@ -908,13 +918,33 @@ window.up_sugT=function(){const rows=EV.filter(r=>r[4]<90&&!(T[r[0]]&&T[r[0]].t!
   rows.forEach(r=>{const s=r[4],nx=s<50?50:s<75?75:90;T[r[0]]=T[r[0]]||{};T[r[0]].t=Math.max(nx,Math.ceil(s)+(Number.isInteger(s)?1:0))});
   saveT();dash();toast('اقتُرحت المستهدفات لـ '+rows.length+' بندًا.')};
 
+/* ---------- تعديل الإسناد ---------- */
+function fillRoles(){const sel=$('up_br');if(!sel)return;const v=sel.value;sel.innerHTML=roleList().map(r=>'<option'+(r===v?' selected':'')+'>'+h(r)+'</option>').join('')}
+function updSel(){const e=$('up_sc');if(e)e.textContent='المحدد: '+SEL.size;const a=$('up_all');if(a){const l=filt();a.checked=l.length>0&&l.every(x=>SEL.has(x.id))}}
+window.up_sel=function(id,on){if(on)SEL.add(id);else SEL.delete(id);updSel()};
+window.up_selAll=function(on){if(on)filt().forEach(a=>SEL.add(a.id));else SEL.clear();R()};
+function setOwner(a,list){const t=[];list.forEach(x=>{if(x&&!t.includes(x))t.push(x)});a.owner=t.join('، ');a.upd=todayISO();a.ed=1}
+window.up_bulk=function(mode){const r=$('up_br').value,l=A.filter(a=>SEL.has(a.id));
+  if(!l.length){toast('حدّد إجراءً واحدًا على الأقل.');return}if(!r){toast('اختر المسؤول.');return}
+  const txt=mode==='set'?'سيصبح «'+r+'» المسؤول الوحيد عن':mode==='add'?'سيُضاف «'+r+'» مسؤولًا عن':'سيُزال «'+r+'» من مسؤولية';
+  if(!confirm(txt+' '+l.length+' إجراء. متابعة؟'))return;
+  const prev=l.map(a=>[a,a.owner,a.upd]);
+  l.forEach(a=>{const o=owners(a);setOwner(a,mode==='set'?[r]:mode==='add'?o.concat(r):o.filter(x=>x!==r))});
+  SEL.clear();save();R();dash();fillRoles();
+  toast('عُدّل إسناد '+l.length+' إجراء.',()=>{prev.forEach(([a,o,u])=>{a.owner=o;a.upd=u});save();R();dash()},10000)};
+window.up_move=function(id,r){if(!r)return;const a=A.find(x=>x.id==id);if(!a)return;const cu=$('rs').value,prev=[a.owner,a.upd],o=owners(a);
+  setOwner(a,o.includes(cu)?o.map(x=>x===cu?r:x):o.concat(r));save();dash();
+  toast('نُقل «'+short(a.name)+'» إلى '+r+'.',()=>{a.owner=prev[0];a.upd=prev[1];save();dash()},10000)};
+
 /* ---------- حقن عناصر الواجهة ---------- */
 function mount(){if($('up_dash'))return;
   $('dmiss').insertAdjacentHTML('afterend','<div id="up_dash"></div>');
   document.querySelectorAll('.g i').forEach(i=>{if(i.textContent.trim()==='قائد المدرسة')i.textContent='مدير المدرسة'});
-  $('tb').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','نسبة الإنجاز','المسؤول','البداية','تاريخ الإنجاز','الاستحقاق','التحديث','إجراءات'].map(x=>'<th>'+x+'</th>').join('');
-  $('rt').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','الإنجاز','يوجد شاهد؟','الاستحقاق','التحديث',''].map(x=>'<th>'+x+'</th>').join('');
+  $('tb').closest('table').querySelector('thead tr').innerHTML='<th><input type="checkbox" id="up_all" aria-label="تحديد المعروض" onchange="up_selAll(this.checked)"></th>'+['الإجراء','المجال','الحالة','نسبة الإنجاز','المسؤول','البداية','تاريخ الإنجاز','الاستحقاق','التحديث','إجراءات'].map(x=>'<th>'+x+'</th>').join('');
+  $('rt').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','الإنجاز','يوجد شاهد؟','الاستحقاق','التحديث','المسؤول',''].map(x=>'<th>'+x+'</th>').join('');
   $('fs').insertAdjacentHTML('beforeend','<option>متأخرة</option>');
+  $('reg').querySelector('.tools').insertAdjacentHTML('afterend','<div class="tools" id="up_bulk"><b>إسناد جماعي:</b><span id="up_sc">المحدد: 0</span><select id="up_br"></select><button class="b" type="button" onclick="up_bulk(\'set\')">تعيينه مسؤولًا وحيدًا</button><button class="b s" type="button" onclick="up_bulk(\'add\')">إضافته</button><button class="b s" type="button" onclick="up_bulk(\'del\')">إزالته</button><button class="b s" type="button" onclick="up_selAll(false)">إلغاء التحديد</button></div><div class="up-note">حدّد الإجراءات بالخانات (أو استخدم الفلاتر ثم خانة الرأس لتحديد المعروض)، ثم اختر المسؤول واضغط الزر المناسب. لتعديل إجراء واحد استخدم خانات الأدوار في نموذج «تعديل»، ولنقل إجراءات مسؤول بعينه استخدم «نقل إلى…» في «مهامي حسب الدور».</div>');
+  fillRoles();
   $('rs').parentElement.insertAdjacentHTML('beforeend','<button class="b s" type="button" onclick="up_mine()">طباعة مهامي</button><button class="b s" type="button" onclick="up_exUp()">تصدير ملف تحديثاتي</button>');
   $('msg').insertAdjacentHTML('beforebegin','<div class="note"><b>العمل الجماعي دون خادم:</b> يختار كل مسؤول دوره من «مهامي حسب الدور»، يحدّث حالة إجراءاته، ثم يضغط «تصدير ملف تحديثاتي» ويرسله لمن يتولى الدمج، فيستورده هنا بزر «دمج ملف تحديثات». يُعتمد الأحدث تاريخًا لكل إجراء، ولا يُمسّ ما عداه.</div><div class="tools"><label class="b" style="padding:7px 14px;cursor:pointer">دمج ملف تحديثات<input type="file" accept=".json" hidden onchange="up_merge(this)"></label></div>');
   $('ev').querySelector('.note').insertAdjacentHTML('afterend','<div class="tools"><button class="b s" type="button" onclick="up_sugT()">اقتراح مستهدفات متدرجة للبنود دون 90%</button></div>');

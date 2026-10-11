@@ -682,7 +682,241 @@ async function boot(){
 }
 A=seed();R();
 boot();
-</script>
+</script>/* =====================================================================
+   حزمة تطوير بوابة الممارسات الإشرافية وخطة التحسين — الإصدار 3
+   تُضاف في نهاية الملف (بعد سكربت البوابة الأصلي وقبل </body>).
+   لا تغيّر البيانات المحفوظة؛ تضيف وتصلح فوق ما هو موجود.
+   ===================================================================== */
+(function(){
+'use strict';
+if(window.__UP3)return;window.__UP3=1;
+
+/* ---------- إعدادات محفوظة ---------- */
+const CFG={ps:'2026-10-04',pe:'2027-02-03',lastBackup:'',ids:0};
+const saveCfg=()=>persist('sup_portal_cfg',CFG,'تعذر حفظ الإعدادات.');
+
+/* ---------- أدوات التاريخ والنصوص ---------- */
+const pad=n=>String(n).padStart(2,'0');
+const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const dd=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
+const parseDue=a=>{const m=String(a.duration||'').match(/إلى\s*(\d{2})-(\d{2})-(\d{4})/);return m?m[3]+'-'+m[2]+'-'+m[1]:''};
+const dueOf=a=>a.due||parseDue(a)||'';
+const isLate=a=>a.status!=='منفذ'&&!!dueOf(a)&&dueOf(a)<todayISO();
+const daysTo=a=>dd(todayISO(),dueOf(a));
+const short=s=>{s=String(s||'');return s.length>45?s.slice(0,45)+'…':s};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const owners=a=>String(a.owner||'').split(/[،,\n]/).map(x=>x.trim()).filter(Boolean);
+function hash(s){let x=5381;for(let i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return(x>>>0).toString(36)}
+const sig=a=>(a.domain||'')+'|'+String(a.name||'').replace(/\s+/g,' ').trim();
+
+/* معرّفات ثابتة مشتقة من (المجال + الاسم) كي تتطابق الإجراءات الأصلية بين الأجهزة عند دمج التحديثات */
+function stabilize(){if(CFG.ids)return false;const seen={};A.forEach(a=>{const b=hash(sig(a));let k=b,n=1;while(seen[k])k=b+'_'+(++n);seen[k]=1;a.id='s_'+k});CFG.ids=1;return true}
+
+/* مزامنة الحالة والنسبة والتواريخ */
+function syncSP(a,ch){const p=Math.max(0,Math.min(100,Math.round(+a.progress||0)));a.progress=p;
+  if(ch==='status'){if(a.status==='منفذ')a.progress=100;else if(a.status==='لم ينفذ')a.progress=0}
+  else if(ch==='progress'){a.status=p<=0?'لم ينفذ':p>=100?'منفذ':'جارٍ'}}
+function autoDates(a){const t=todayISO();if(a.status!=='لم ينفذ'&&!a.start)a.start=t;if(a.status==='منفذ'&&!a.end)a.end=t}
+
+/* ---------- إشعار مؤقت مع تراجع ---------- */
+let TT;
+function toast(m,undo,ms){const e=$('up_toast');if(!e)return;e.innerHTML='<span>'+h(m)+'</span>'+(undo?' <button class="b s" id="up_undo" type="button">تراجع</button>':'');e.style.display='flex';
+  if(undo)$('up_undo').onclick=()=>{undo();e.style.display='none'};clearTimeout(TT);TT=setTimeout(()=>{e.style.display='none'},ms||3500)}
+
+/* ---------- تنسيقات ---------- */
+const css=document.createElement('style');
+css.textContent=`
+#up_toast{display:none;position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:#1d2a24;color:#fff;padding:10px 16px;border-radius:10px;gap:12px;align-items:center;z-index:100;box-shadow:0 4px 14px #0005;max-width:92vw}
+.card.bad b{color:#a63232}.card.warn b{color:#e36c0a}.card.link{cursor:pointer}.card small{display:block;color:var(--gr);font-size:.78rem;font-weight:400}
+#up_dash h3{margin:18px 0 8px}.up-note{font-size:.8rem;color:var(--gr);margin:4px 0 10px}
+.up-q select,.up-q input{min-width:0}
+@media print{#up_dash{display:none!important}}
+`;
+document.head.appendChild(css);
+
+/* ---------- إصلاحات وتحسينات على الدوال الأصلية ---------- */
+
+/* 1) إضافة حقلي الاستحقاق وتاريخ آخر تحديث، وتحسين الصياغة */
+if(!F.some(f=>f[0]==='due')){const i=F.findIndex(f=>f[0]==='end');F.splice(i+1,0,['due','تاريخ الاستحقاق (المخطط)','d'])}
+const _blank=blank;blank=function(d,n){const o=_blank(d,n);o.due='';o.upd='';return o};
+
+/* 2) أرقام الدليل التطبيقي للبيئة المدرسية: عرض العنوان الصحيح لكل مؤشر بحسب جوانبه */
+Object.keys(ENV_AGD).forEach(c=>{IT[c]=ENV_NAMES[c]});
+
+/* 3) بحث أسرع (لا يمرّ على المرفقات المشفرة) ومرشّح «متأخرة» */
+const TXT=x=>[x.name,x.domain,x.component,x.need,x.goal,x.steps,x.owner,x.committees,x.evidence,x.notes,x.recs,x.status].join(' ');
+filt=function(){const q=$('q').value.trim(),d=$('fd').value,s=$('fs').value,kk=$('fk').value,o=$('fo').value.trim(),a=$('f1').value,b=$('f2').value;
+  return A.filter(x=>(!q||TXT(x).includes(q))&&(!d||x.domain==d)&&(!s||(s==='متأخرة'?isLate(x):x.status==s))&&(!kk||(x.kind||'تحسين')==kk)&&(!o||String(x.owner||'').includes(o))&&(!a||(x.end||x.start)&&(x.end||x.start)>=a)&&(!b||(x.end||x.start)&&(x.end||x.start)<=b))};
+
+/* 4) خلية الاستحقاق + سجل الإجراءات (لوحة المؤشرات لا تُعاد رسمها مع كل حرف بحث) */
+function dueCell(a){const d=dueOf(a);if(!d)return'—';if(a.status==='منفذ')return d;const n=daysTo(a);
+  return d+(n<0?' <span class="lv" style="background:#a63232">متأخر '+(-n)+' يوم</span>':n<=14?' <span class="lv" style="background:#e36c0a">خلال '+n+' يوم</span>':'')}
+let RT;
+R=function(){const l=filt();
+  $('tb').innerHTML=l.map(a=>'<tr><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><span class="st '+a.status+'">'+a.status+'</span></td><td>'+a.progress+'%</td><td>'+h(a.owner)+'</td><td>'+(a.start||'—')+'</td><td>'+(a.end||'—')+'</td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td style="white-space:nowrap"><button class="b s" onclick="edit(\''+a.id+'\')">تعديل</button> <button class="b d" onclick="del(\''+a.id+'\')">حذف</button></td></tr>').join('')||'<tr><td colspan="10">لا نتائج</td></tr>';
+  $('cnt').textContent='المعروض '+l.length+' من '+A.length;clearTimeout(RT);RT=setTimeout(()=>dash(),200)};
+
+/* 5) حفظ الإجراء: يحفظ علامات الصياغة الآلية، ويختم تاريخ التحديث */
+sv=function(e){e.preventDefault();const fd=new FormData($('fm')),o={id:cur?cur.id:uid()};
+  F.forEach(([k,,t])=>{if(t!='m')o[k]=(fd.get(k)||'').toString().trim()});o.methods=fd.getAll('m');o.files=files;o.progress=Math.round(+o.progress||0);
+  if(cur){['rw','rx'].forEach(k=>{if(cur[k])o[k]=cur[k]});o.ed=1}
+  o.upd=todayISO();
+  const er=chk(o);if(er){alert(er);return false}
+  if(cur)A[A.findIndex(x=>x.id==cur.id)]=o;else A.push(o);
+  if(save()){dlg.close();R()}return false};
+
+/* 6) نموذج الإجراء: ربط الحالة بالنسبة وتعبئة التواريخ تلقائيًا */
+const _edit=edit;
+edit=function(id){_edit(id);const f=$('fm');if(!f)return;const st=f.elements['status'],pg=f.elements['progress'],sd=f.elements['start'],ed=f.elements['end'];if(!st||!pg)return;
+  const fill=()=>{const t=todayISO();if(st.value!=='لم ينفذ'&&sd&&!sd.value)sd.value=t;if(st.value==='منفذ'&&ed&&!ed.value)ed.value=t};
+  st.addEventListener('change',()=>{if(st.value==='منفذ')pg.value=100;else if(st.value==='لم ينفذ')pg.value=0;fill()});
+  pg.addEventListener('change',()=>{const p=Math.round(+pg.value||0);st.value=p<=0?'لم ينفذ':p>=100?'منفذ':'جارٍ';fill()})};
+
+/* 7) حذف مع إمكانية التراجع */
+del=function(id){const i=A.findIndex(x=>x.id==id);if(i<0)return;const a=A[i];A.splice(i,1);save();R();
+  toast('حُذف الإجراء «'+short(a.name)+'»',()=>{A.splice(Math.min(i,A.length),0,a);save();R()},10000)};
+
+/* 8) إصلاح: addP2 كانت تكتب \n حرفيًا بدل سطر جديد */
+const fixNL=()=>{let c=false;A.forEach(a=>['steps','notes'].forEach(k=>{if(a[k]&&a[k].indexOf('\\n')>-1){a[k]=a[k].split('\\n').join('\n');c=true}}));return c};
+const _addP2=addP2;addP2=function(){const c=_addP2();fixNL();return c};
+
+/* 9) الصياغة الآلية لا تمسّ إجراءً عدّله المستخدم يدويًا */
+const _RW=RW;RW=function(){const ed=A.filter(a=>a.ed&&!a.rw);ed.forEach(a=>{a.rw=1});const c=_RW();ed.forEach(a=>{delete a.rw});return c};
+
+/* 10) إعادة الضبط تعيد المعرّفات الثابتة */
+const _reset=reset;reset=function(){const b=A;_reset();if(A!==b){CFG.ids=0;if(stabilize()){save();saveCfg();R()}}};
+
+/* 11) النسخة الاحتياطية تتضمن الإعدادات وتسجّل تاريخ آخر نسخة */
+bk=function(){dl('backup-'+stamp()+'.json',JSON.stringify({app:'flgt-hov',v:3,date:new Date().toISOString(),actions:A,evaluation:T,follow:FU,apply:FA,config:CFG},null,1),'application/json');
+  CFG.lastBackup=todayISO();saveCfg();msg('تم تصدير النسخة الاحتياطية الشاملة (تتضمن المرفقات والمستهدفات والإعدادات).',1);dash()};
+
+/* 12) مهامي حسب الدور: تحديث سريع للحالة والنسبة دون فتح النموذج */
+RM=function(){const sel=$('rs');if(!sel||!$('rt'))return;const cu=sel.value,rs=[...new Set(A.flatMap(tok))].sort((a,b)=>a.localeCompare(b,'ar'));
+  sel.innerHTML='<option value="">اختر دورك...</option>'+rs.map(x=>'<option'+(x==cu?' selected':'')+'>'+h(x)+'</option>').join('');
+  const l=cu?A.filter(a=>tok(a).includes(cu)):[],bad=l.filter(a=>miss(a).length),lt=l.filter(isLate);
+  $('rc').innerHTML=cu?'<div class="card">إجراءاتي<b>'+l.length+'</b></div>'+S.map(x=>'<div class="card">'+x+'<b>'+l.filter(a=>a.status==x).length+'</b></div>').join('')+'<div class="card">متوسط الإنجاز<b>'+avg(l)+'%</b></div><div class="card'+(lt.length?' bad':'')+'">متأخرة<b>'+lt.length+'</b></div><div class="card">تحتاج تحديثًا<b>'+bad.length+'</b></div>':'';
+  const rk=a=>(isLate(a)?2:0)+(miss(a).length?1:0);
+  $('rt').innerHTML=cu?l.slice().sort((a,b)=>rk(b)-rk(a)).map(a=>'<tr class="up-q"><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><select onchange="up_qu(\''+a.id+'\',\'status\',this.value)">'+S.map(x=>'<option'+(x==a.status?' selected':'')+'>'+x+'</option>').join('')+'</select></td><td><input type="number" min="0" max="100" style="width:80px" value="'+a.progress+'" onchange="up_qu(\''+a.id+'\',\'progress\',this.value)"></td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td><button class="b s" onclick="edit(\''+a.id+'\')">تحديث كامل</button></td></tr>').join(''):'<tr><td colspan="7">اختر دورًا لعرض إجراءاته.</td></tr>'};
+window.up_qu=function(id,k,v){const a=A.find(x=>x.id==id);if(!a)return;const old={status:a.status,progress:a.progress,start:a.start,end:a.end,upd:a.upd};
+  if(k==='status')a.status=v;else a.progress=v;
+  syncSP(a,k);autoDates(a);const e=chk(a);
+  if(e){Object.assign(a,old);toast(e);RM();return}
+  a.upd=todayISO();a.ed=1;save();dash();toast('تم تحديث «'+short(a.name)+'»')};
+
+/* ---------- لوحة المتابعة (تُضاف إلى لوحة المؤشرات) ---------- */
+function pulse(){const el=(CFG.ps&&CFG.pe&&CFG.pe>CFG.ps)?Math.round(Math.min(100,Math.max(0,dd(CFG.ps,todayISO())/dd(CFG.ps,CFG.pe)*100))):0;
+  return{el,ac:avg(A.filter(a=>a.kind!=='استدامة'))}}
+function verdict(p){if(p.el<10)return{t:'بداية الفترة',c:''};const g=p.el-p.ac;return g>15?{t:'متأخر عن الجدول',c:'bad'}:g>5?{t:'يحتاج تسريعًا',c:'warn'}:{t:'ضمن المسار',c:''}}
+
+function prioTable(){const rows=EV.filter(r=>r[4]<90).sort((a,b)=>a[4]-b[4]);
+  if(!rows.length)return'<div class="note">جميع بنود التقويم بمستوى التميز (90% فأكثر).</div>';
+  return'<table><thead><tr><th>البند</th><th>النتيجة</th><th>المستوى</th><th>الفجوة إلى 90%</th><th>إجراءات مرتبطة</th><th>الإنجاز</th><th>الموقف</th></tr></thead><tbody>'+rows.map(r=>{const l=lk(r[0]),n=l.length,
+    st=!n?'<b style="color:#a63232">بلا إجراء</b>':l.every(a=>a.status==='لم ينفذ')?'لم يبدأ':l.every(a=>a.status==='منفذ')?'منفذ':'جارٍ';
+    return'<tr'+(!n?' style="background:#fff7e0"':'')+'><td>'+(CODE[r[0]]?'<b>'+CODE[r[0]]+'</b> ':'')+h(r[3])+'</td><td>'+r[4]+'%</td><td>'+lvb(r[4])+'</td><td>'+Math.round((90-r[4])*100)/100+'</td><td>'+n+'</td><td>'+(n?avg(l)+'%':'—')+'</td><td>'+st+'</td></tr>'}).join('')+'</tbody></table>'}
+
+function lateTable(pr,lim){const l=A.filter(a=>a.status!=='منفذ'&&dueOf(a)).sort((a,b)=>dueOf(a)<dueOf(b)?-1:dueOf(a)>dueOf(b)?1:(+a.progress||0)-(+b.progress||0)).slice(0,lim);
+  if(!l.length)return'<div class="note">لا إجراءات لها موعد استحقاق بعد. حدّد الموعد من نموذج الإجراء أو بزر «تعيين موعد افتراضي».</div>';
+  return'<table><thead><tr><th>الإجراء</th><th>المسؤول</th><th>الحالة</th><th>الاستحقاق</th>'+(pr?'':'<th></th>')+'</tr></thead><tbody>'+l.map(a=>'<tr><td>'+h(a.name)+'</td><td>'+h(a.owner)+'</td><td>'+a.status+' ('+a.progress+'%)</td><td>'+dueCell(a)+'</td>'+(pr?'':'<td><button class="b s" onclick="edit(\''+a.id+'\')">تحديث</button></td>')+'</tr>').join('')+'</tbody></table>'}
+
+function roleStats(){const m={};A.forEach(a=>{const rs=owners(a);(rs.length?rs:['— بلا مسؤول —']).forEach(r=>{(m[r]=m[r]||[]).push(a)})});
+  return Object.entries(m).map(([r,l])=>({r,n:l.length,d:l.filter(a=>a.status==='منفذ').length,p:l.filter(a=>a.status==='جارٍ').length,z:l.filter(a=>a.status==='لم ينفذ').length,late:l.filter(isLate).length,bad:l.filter(a=>miss(a).length).length,pc:avg(l)})).sort((a,b)=>b.late-a.late||b.n-a.n)}
+function roleTable(pr){const rs=roleStats();if(!rs.length)return'';
+  return'<table><thead><tr><th>المسؤول</th><th>الإجراءات</th><th>منفذ</th><th>جارٍ</th><th>لم ينفذ</th><th>متأخرة</th><th>تحتاج تحديثًا</th><th>متوسط الإنجاز</th></tr></thead><tbody>'+rs.map(x=>'<tr><td>'+(pr?h(x.r):'<a href="#" data-r="'+h(x.r)+'" onclick="up_goRole(this.dataset.r);return false">'+h(x.r)+'</a>')+'</td><td>'+x.n+'</td><td>'+x.d+'</td><td>'+x.p+'</td><td>'+x.z+'</td><td>'+(x.late?'<b style="color:#a63232">'+x.late+'</b>':0)+'</td><td>'+x.bad+'</td><td>'+x.pc+'%</td></tr>').join('')+'</tbody></table>'}
+
+function UP(){const c=$('up_dash');if(!c)return;const t=todayISO(),p=pulse(),v=verdict(p),
+  late=A.filter(isLate),soon=A.filter(a=>a.status!=='منفذ'&&dueOf(a)&&daysTo(a)>=0&&daysTo(a)<=14),
+  noOwner=A.filter(a=>!(a.owner||'').trim()),noDue=A.filter(a=>a.status!=='منفذ'&&!dueOf(a)),
+  oldBk=!CFG.lastBackup||dd(CFG.lastBackup,t)>14;
+  c.innerHTML='<h3>متابعة الخطة والمواعيد</h3>'+
+  (oldBk?'<div class="note">⚠ '+(CFG.lastBackup?'مضى أكثر من 14 يومًا على آخر نسخة احتياطية ('+CFG.lastBackup+').':'لم تُؤخذ نسخة احتياطية بعد.')+' البيانات محفوظة داخل هذا المتصفح فقط؛ خذ نسخة من تبويب «البيانات والنسخ الاحتياطي».</div>':'')+
+  '<div class="cards"><div class="card '+v.c+'">نبض الخطة<b>'+p.ac+'%</b><small>الإنجاز الفعلي مقابل '+p.el+'% من زمن الخطة — '+v.t+'</small></div>'+
+  '<div class="card link '+(late.length?'bad':'')+'" onclick="up_goLate()">متأخرة عن موعدها<b>'+late.length+'</b><small>اضغط لعرضها في السجل</small></div>'+
+  '<div class="card '+(soon.length?'warn':'')+'">تستحق خلال 14 يومًا<b>'+soon.length+'</b></div>'+
+  '<div class="card '+(noOwner.length?'warn':'')+'">بلا مسؤول<b>'+noOwner.length+'</b></div>'+
+  '<div class="card '+(noDue.length?'warn':'')+'">بلا موعد استحقاق<b>'+noDue.length+'</b></div></div>'+
+  '<div class="up-note">معيار «نبض الخطة» مقترح من البوابة: يقارن نسبة الزمن المنقضي من فترة الخطة بمتوسط إنجاز إجراءات التحسين، وليس معيارًا وزاريًا.</div>'+
+  '<div class="tools"><button class="b" onclick="up_exec()">طباعة التقرير التنفيذي</button>'+(noDue.length?'<button class="b s" onclick="up_dueAll()">تعيين موعد افتراضي ('+noDue.length+')</button>':'')+
+  '<label>بداية فترة الخطة <input type="date" id="up_ps" value="'+h(CFG.ps)+'" onchange="up_cfg()"></label><label>نهايتها <input type="date" id="up_pe" value="'+h(CFG.pe)+'" onchange="up_cfg()"></label></div>'+
+  '<h3>أولويات التحسين من نتائج التقويم</h3><div class="tw">'+prioTable()+'</div>'+
+  '<h3>أقرب الاستحقاقات والمتأخرات</h3><div class="tw">'+lateTable(0,8)+'</div>'+
+  '<h3>حمل المسؤولين</h3><div class="tw">'+roleTable(0)+'</div>'}
+
+const _dash=dash;dash=function(){_dash();UP()};
+
+window.up_goLate=function(){document.querySelector('#nav button[data-t="reg"]').click();$('fs').value='متأخرة';R()};
+window.up_goRole=function(r){document.querySelector('#nav button[data-t="me"]').click();$('rs').value=r;RM()};
+window.up_cfg=function(){const a=$('up_ps').value,b=$('up_pe').value;if(!a||!b||b<=a){toast('تاريخ نهاية الفترة يجب أن يلي بدايتها.');UP();return}CFG.ps=a;CFG.pe=b;saveCfg();UP();toast('حُفظت فترة الخطة.')};
+window.up_dueAll=function(){const l=A.filter(a=>a.status!=='منفذ'&&!dueOf(a));if(!l.length)return;
+  if(!confirm('سيُعيَّن موعد الاستحقاق '+CFG.pe+' (نهاية فترة الخطة) لـ '+l.length+' إجراء بلا موعد. يمكنك تعديل كل موعد لاحقًا. متابعة؟'))return;
+  l.forEach(a=>{a.due=CFG.pe});save();R();dash();toast('عُيّن الموعد لـ '+l.length+' إجراء.')};
+
+/* ---------- التقرير التنفيذي (طباعة / PDF) ---------- */
+window.up_exec=function(){const d=new Date(),p=pulse(),v=verdict(p),AI=A.filter(a=>a.kind!=='استدامة'),f=fc(flist()),
+  c=S.map(s=>AI.filter(a=>a.status===s).length),started=A.filter(a=>a.status!=='لم ينفذ'),bad=started.filter(a=>miss(a).length);
+  $('pt').textContent='التقرير التنفيذي لمتابعة خطة التحسين';
+  $('pd').textContent=d.toLocaleDateString('ar-SA')+' م — '+d.toLocaleDateString('ar-SA-u-ca-islamic')+' هـ';
+  $('pr').innerHTML='<h3>المؤشرات العامة</h3><table><tr><th>إجراءات التحسين</th><th>لم ينفذ</th><th>جارٍ</th><th>منفذ</th><th>نسبة الإنجاز</th><th>الزمن المنقضي</th><th>متأخرة</th><th>اكتمال التحديث</th><th>إنجاز استمارة المتابعة</th></tr><tr><td>'+AI.length+'</td><td>'+c[0]+'</td><td>'+c[1]+'</td><td>'+c[2]+'</td><td>'+p.ac+'%</td><td>'+p.el+'%</td><td>'+A.filter(isLate).length+'</td><td>'+(started.length?Math.round((started.length-bad.length)/started.length*100)+'%':'—')+'</td><td>'+pcs(f.pc)+'</td></tr></table>'+
+  '<p><b>موقف الخطة من الجدول (معيار مقترح):</b> '+v.t+' — فترة الخطة من '+CFG.ps+' إلى '+CFG.pe+'.</p>'+
+  '<h3>أولويات التحسين من نتائج التقويم (الأداء العام 83%)</h3>'+prioTable()+
+  '<h3>أقرب الاستحقاقات والمتأخرات</h3>'+lateTable(1,15)+
+  '<h3>حمل المسؤولين</h3>'+roleTable(1)+
+  '<table><tr><td>مدير المدرسة: خالد المطيري</td><td>التوقيع: ..............</td><td>تاريخ الاعتماد: ....../....../......</td><td>ختم المدرسة</td></tr></table>';
+  window.print()};
+
+/* ---------- طباعة مهامي ---------- */
+window.up_mine=function(){const r=$('rs').value;if(!r){toast('اختر دورك أولًا.');return}const l=A.filter(a=>tok(a).includes(r)),d=new Date();
+  $('pt').textContent='مهام: '+r;$('pd').textContent=d.toLocaleDateString('ar-SA')+' م — '+d.toLocaleDateString('ar-SA-u-ca-islamic')+' هـ';
+  $('pr').innerHTML='<table><thead><tr><th>الإجراء</th><th>المجال</th><th>الحالة</th><th>%</th><th>البداية</th><th>الاستحقاق</th><th>الشواهد</th><th>الناقص</th></tr></thead><tbody>'+l.map(a=>'<tr><td>'+h(a.name)+'</td><td>'+h(a.domain)+'</td><td>'+a.status+'</td><td>'+a.progress+'</td><td>'+(a.start||'')+'</td><td>'+(dueOf(a)||'')+'</td><td>'+h(a.evidence)+'</td><td>'+h(miss(a).join('، '))+'</td></tr>').join('')+'</tbody></table><table><tr><td>المسؤول: '+h(r)+'</td><td>التوقيع: ..............</td><td>التاريخ: ....../....../......</td></tr></table>';window.print()};
+
+/* ---------- تبادل التحديثات بين المسؤولين (دون خادم) ---------- */
+window.up_exUp=function(){const r=$('rs').value;if(!r){toast('اختر دورك أولًا من القائمة.');return}
+  const l=A.filter(a=>tok(a).includes(r));dl('updates-'+stamp()+'.json',JSON.stringify({app:'flgt-hov-updates',role:r,date:new Date().toISOString(),actions:l},null,1),'application/json');
+  toast('صُدّر ملف تحديثات «'+r+'» ('+l.length+' إجراء). أرسله لمن يتولى الدمج.')};
+const UPF=['status','progress','start','end','due','evidence','extra','recs','visitors','notes','files'];
+window.up_merge=function(inp){const f=inp.files[0];inp.value='';rd(f,t=>{const j=JSON.parse(t),rows=Array.isArray(j)?j:j.actions;if(!Array.isArray(rows))throw'ليس ملف تحديثات صالحًا';
+  let skip=0;const er=[],plan=[];
+  rows.forEach((x,i)=>{const o=norm(x);o.id=x.id||o.id;o.upd=x.upd||'';
+    const m=A.find(a=>a.id==o.id)||A.find(a=>sig(a)==sig(o));
+    if(m){if(!o.upd||o.upd<=(m.upd||'')){skip++;return}const n=Object.assign({},m);UPF.forEach(k=>{n[k]=o[k]});n.upd=o.upd;const e=chk(n);if(e){er.push('صف '+(i+1)+': '+e);return}plan.push([m,n])}
+    else{const e=chk(o);if(e){er.push('صف '+(i+1)+': '+e);return}plan.push([null,o])}});
+  const up=plan.filter(x=>x[0]).length,nw=plan.length-up;
+  if(!plan.length){msg('لا جديد للدمج. المتجاهل (أقدم أو مطابق أو بلا تاريخ تحديث): '+skip+(er.length?' — المرفوض: '+er.length+'<br>'+er.slice(0,10).map(h).join('<br>'):''));return}
+  if(!confirm('سيُحدَّث '+up+' إجراء ويُضاف '+nw+' إجراء جديد (يُتجاهل '+skip+' لأن نسختك أحدث أو مطابقة). متابعة؟'))return;
+  plan.forEach(([m,n])=>{if(m)Object.assign(m,n);else A.push(n)});save();R();dash();
+  msg('تم الدمج: تحديث '+up+'، إضافة '+nw+'، تجاهل '+skip+(er.length?'، رفض '+er.length+'<br>'+er.slice(0,10).map(h).join('<br>'):'')+'.',!er.length)})};
+
+/* ---------- اقتراح مستهدفات متدرجة وفق الدليل ---------- */
+window.up_sugT=function(){const rows=EV.filter(r=>r[4]<90&&!(T[r[0]]&&T[r[0]].t!=null));
+  if(!rows.length){toast('لا بنود دون 90% بلا مستهدف.');return}
+  if(!confirm('سيُقترح مستهدف متدرج لـ '+rows.length+' بندًا (التهيئة نحو 50%، الانطلاق نحو 75%، التقدم نحو 90%) دون تغيير أي مستهدف أدخلته أنت. يمكنك تعديل كل قيمة. متابعة؟'))return;
+  rows.forEach(r=>{const s=r[4],nx=s<50?50:s<75?75:90;T[r[0]]=T[r[0]]||{};T[r[0]].t=Math.max(nx,Math.ceil(s)+(Number.isInteger(s)?1:0))});
+  saveT();dash();toast('اقتُرحت المستهدفات لـ '+rows.length+' بندًا.')};
+
+/* ---------- حقن عناصر الواجهة ---------- */
+function mount(){if($('up_dash'))return;
+  $('dmiss').insertAdjacentHTML('afterend','<div id="up_dash"></div>');
+  $('tb').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','نسبة الإنجاز','المسؤول','البداية','تاريخ الإنجاز','الاستحقاق','التحديث','إجراءات'].map(x=>'<th>'+x+'</th>').join('');
+  $('rt').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','الإنجاز','الاستحقاق','التحديث',''].map(x=>'<th>'+x+'</th>').join('');
+  $('fs').insertAdjacentHTML('beforeend','<option>متأخرة</option>');
+  $('rs').parentElement.insertAdjacentHTML('beforeend','<button class="b s" type="button" onclick="up_mine()">طباعة مهامي</button><button class="b s" type="button" onclick="up_exUp()">تصدير ملف تحديثاتي</button>');
+  $('msg').insertAdjacentHTML('beforebegin','<div class="note"><b>العمل الجماعي دون خادم:</b> يختار كل مسؤول دوره من «مهامي حسب الدور»، يحدّث حالة إجراءاته، ثم يضغط «تصدير ملف تحديثاتي» ويرسله لمن يتولى الدمج، فيستورده هنا بزر «دمج ملف تحديثات». يُعتمد الأحدث تاريخًا لكل إجراء، ولا يُمسّ ما عداه.</div><div class="tools"><label class="b" style="padding:7px 14px;cursor:pointer">دمج ملف تحديثات<input type="file" accept=".json" hidden onchange="up_merge(this)"></label></div>');
+  $('ev').querySelector('.note').insertAdjacentHTML('afterend','<div class="tools"><button class="b s" type="button" onclick="up_sugT()">اقتراح مستهدفات متدرجة للبنود دون 90%</button></div>');
+  document.body.insertAdjacentHTML('beforeend','<div id="up_toast" class="np" role="status" aria-live="polite"></div>')}
+mount();
+
+/* ---------- التهيئة بعد اكتمال تحميل البيانات الأصلي ---------- */
+(async function init(){try{
+  await openDB();
+  for(let i=0;i<40;i++){if(await dbGet('sup_portal_rx'))break;await sleep(150)}
+  Object.assign(CFG,await stateGet('sup_portal_cfg',{}));
+  let ch=fixNL();
+  A.forEach(a=>{if(a.due===undefined){a.due='';ch=true}if(a.upd===undefined){a.upd='';ch=true}});
+  if(stabilize())ch=true;
+  if(ch)save();saveCfg();
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+  R();dash();
+}catch(e){console.error('UP3 init',e)}})();
+})();
 </body>
 </html>
 

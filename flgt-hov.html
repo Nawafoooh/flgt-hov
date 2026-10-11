@@ -682,7 +682,6 @@ async function boot(){
 }
 A=seed();R();
 boot();
-boot();
 </script>
 
 <script>
@@ -711,6 +710,8 @@ const short=s=>{s=String(s||'');return s.length>45?s.slice(0,45)+'…':s};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const owners=a=>String(a.owner||'').split(/[،,\n]/).map(x=>x.trim()).filter(Boolean);
 function hash(s){let x=5381;for(let i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return(x>>>0).toString(36)}
+const EVY='يوجد شاهد (محفوظ في Google Drive)';
+const hasEv=a=>!!((a.evidence||'').trim()||(a.files||[]).length);
 const sig=a=>(a.domain||'')+'|'+String(a.name||'').replace(/\s+/g,' ').trim();
 
 /* معرّفات ثابتة مشتقة من (المجال + الاسم) كي تتطابق الإجراءات الأصلية بين الأجهزة عند دمج التحديثات */
@@ -764,6 +765,7 @@ R=function(){const l=filt();
 sv=function(e){e.preventDefault();const fd=new FormData($('fm')),o={id:cur?cur.id:uid()};
   F.forEach(([k,,t])=>{if(t!='m')o[k]=(fd.get(k)||'').toString().trim()});o.methods=fd.getAll('m');o.files=files;o.progress=Math.round(+o.progress||0);
   if(cur){['rw','rx'].forEach(k=>{if(cur[k])o[k]=cur[k]});o.ed=1}
+  const ue=$('up_ev');if(ue){if(ue.value==='1'&&!o.evidence)o.evidence=EVY;else if(ue.value==='0'&&o.evidence===EVY)o.evidence=''}
   o.upd=todayISO();
   const er=chk(o);if(er){alert(er);return false}
   if(cur)A[A.findIndex(x=>x.id==cur.id)]=o;else A.push(o);
@@ -773,6 +775,10 @@ sv=function(e){e.preventDefault();const fd=new FormData($('fm')),o={id:cur?cur.i
 const _edit=edit;
 edit=function(id){_edit(id);const f=$('fm');if(!f)return;const st=f.elements['status'],pg=f.elements['progress'],sd=f.elements['start'],ed=f.elements['end'];if(!st||!pg)return;
   const fill=()=>{const t=todayISO();if(st.value!=='لم ينفذ'&&sd&&!sd.value)sd.value=t;if(st.value==='منفذ'&&ed&&!ed.value)ed.value=t};
+  const fb=$('fl')&&$('fl').parentElement;
+  if(fb){fb.innerHTML='<label>هل يوجد شاهد؟ (الشواهد محفوظة في Google Drive ولا تُرفع هنا)<select id="up_ev"><option value="0">لا</option><option value="1">نعم، يوجد شاهد</option></select></label>';
+    $('up_ev').value=(cur&&hasEv(cur))?'1':'0';
+    const ee=f.elements['evidence'];if(ee)ee.addEventListener('input',()=>{if(ee.value.trim())$('up_ev').value='1'})}
   st.addEventListener('change',()=>{if(st.value==='منفذ')pg.value=100;else if(st.value==='لم ينفذ')pg.value=0;fill()});
   pg.addEventListener('change',()=>{const p=Math.round(+pg.value||0);st.value=p<=0?'لم ينفذ':p>=100?'منفذ':'جارٍ';fill()})};
 
@@ -805,8 +811,9 @@ RM=function(){const sel=$('rs');if(!sel||!$('rt'))return;const cu=sel.value,rs=[
   const l=cu?A.filter(a=>tok(a).includes(cu)):[],bad=l.filter(a=>miss(a).length),lt=l.filter(isLate);
   $('rc').innerHTML=cu?'<div class="card">إجراءاتي<b>'+l.length+'</b></div>'+S.map(x=>'<div class="card">'+x+'<b>'+l.filter(a=>a.status==x).length+'</b></div>').join('')+'<div class="card">متوسط الإنجاز<b>'+avg(l)+'%</b></div><div class="card'+(lt.length?' bad':'')+'">متأخرة<b>'+lt.length+'</b></div><div class="card">تحتاج تحديثًا<b>'+bad.length+'</b></div>':'';
   const rk=a=>(isLate(a)?2:0)+(miss(a).length?1:0);
-  $('rt').innerHTML=cu?l.slice().sort((a,b)=>rk(b)-rk(a)).map(a=>'<tr class="up-q"><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><select onchange="up_qu(\''+a.id+'\',\'status\',this.value)">'+S.map(x=>'<option'+(x==a.status?' selected':'')+'>'+x+'</option>').join('')+'</select></td><td><input type="number" min="0" max="100" style="width:80px" value="'+a.progress+'" onchange="up_qu(\''+a.id+'\',\'progress\',this.value)"></td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td><button class="b s" onclick="edit(\''+a.id+'\')">تحديث كامل</button></td></tr>').join(''):'<tr><td colspan="7">اختر دورًا لعرض إجراءاته.</td></tr>'};
-window.up_qu=function(id,k,v){const a=A.find(x=>x.id==id);if(!a)return;const old={status:a.status,progress:a.progress,start:a.start,end:a.end,upd:a.upd};
+  $('rt').innerHTML=cu?l.slice().sort((a,b)=>rk(b)-rk(a)).map(a=>'<tr class="up-q"><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><select onchange="up_qu(\''+a.id+'\',\'status\',this.value)">'+S.map(x=>'<option'+(x==a.status?' selected':'')+'>'+x+'</option>').join('')+'</select></td><td><input type="number" min="0" max="100" style="width:80px" value="'+a.progress+'" onchange="up_qu(\''+a.id+'\',\'progress\',this.value)"></td><td><select onchange="up_qu(\''+a.id+'\',\'ev\',this.value)"><option value="0">لا</option><option value="1"'+(hasEv(a)?' selected':'')+'>نعم</option></select></td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td><button class="b s" onclick="edit(\''+a.id+'\')">تحديث كامل</button></td></tr>').join(''):'<tr><td colspan="8">اختر دورًا لعرض إجراءاته.</td></tr>'};
+window.up_qu=function(id,k,v){const a=A.find(x=>x.id==id);if(!a)return;const old={status:a.status,progress:a.progress,start:a.start,end:a.end,upd:a.upd,evidence:a.evidence};
+  if(k==='ev'){if(v==='1'){if(!(a.evidence||'').trim())a.evidence=EVY}else a.evidence='';a.upd=todayISO();a.ed=1;save();dash();toast('تم تحديث الشاهد');return}
   if(k==='status')a.status=v;else a.progress=v;
   syncSP(a,k);autoDates(a);const e=chk(a);
   if(e){Object.assign(a,old);toast(e);RM();return}
@@ -906,7 +913,7 @@ function mount(){if($('up_dash'))return;
   $('dmiss').insertAdjacentHTML('afterend','<div id="up_dash"></div>');
   document.querySelectorAll('.g i').forEach(i=>{if(i.textContent.trim()==='قائد المدرسة')i.textContent='مدير المدرسة'});
   $('tb').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','نسبة الإنجاز','المسؤول','البداية','تاريخ الإنجاز','الاستحقاق','التحديث','إجراءات'].map(x=>'<th>'+x+'</th>').join('');
-  $('rt').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','الإنجاز','الاستحقاق','التحديث',''].map(x=>'<th>'+x+'</th>').join('');
+  $('rt').closest('table').querySelector('thead tr').innerHTML=['الإجراء','المجال','الحالة','الإنجاز','يوجد شاهد؟','الاستحقاق','التحديث',''].map(x=>'<th>'+x+'</th>').join('');
   $('fs').insertAdjacentHTML('beforeend','<option>متأخرة</option>');
   $('rs').parentElement.insertAdjacentHTML('beforeend','<button class="b s" type="button" onclick="up_mine()">طباعة مهامي</button><button class="b s" type="button" onclick="up_exUp()">تصدير ملف تحديثاتي</button>');
   $('msg').insertAdjacentHTML('beforebegin','<div class="note"><b>العمل الجماعي دون خادم:</b> يختار كل مسؤول دوره من «مهامي حسب الدور»، يحدّث حالة إجراءاته، ثم يضغط «تصدير ملف تحديثاتي» ويرسله لمن يتولى الدمج، فيستورده هنا بزر «دمج ملف تحديثات». يُعتمد الأحدث تاريخًا لكل إجراء، ولا يُمسّ ما عداه.</div><div class="tools"><label class="b" style="padding:7px 14px;cursor:pointer">دمج ملف تحديثات<input type="file" accept=".json" hidden onchange="up_merge(this)"></label></div>');
@@ -915,7 +922,8 @@ function mount(){if($('up_dash'))return;
 mount();
 /* «لجنة التميز» ← «فريق التميز» في النصوص الثابتة ونصوص مسؤولية التنفيذ المقترحة */
 SG.forEach(x=>{x[1]=x[1].replace(/لجنة التميز/g,'فريق التميز')});
-(function(){const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while((n=w.nextNode())){const p=n.parentNode&&n.parentNode.nodeName;if(p==='SCRIPT'||p==='STYLE'||p==='TEXTAREA')continue;if(n.nodeValue.indexOf('لجنة التميز')>-1)n.nodeValue=n.nodeValue.replace(/لجنة التميز/g,'فريق التميز')}})();
+const TXR=[['لجنة التميز','فريق التميز'],['أرفق الشواهد بكل إجراء من نموذج التعديل.','اكتفِ بتحديد «نعم، يوجد شاهد» في كل إجراء؛ فالشواهد نفسها محفوظة في Google Drive.'],['المرفقات حتى 500 كيلوبايت للملف وتُحفظ داخل المتصفح.','الشواهد لا تُرفع إلى البوابة؛ تُحفظ في Google Drive، ويكفي تحديد «نعم، يوجد شاهد» في الإجراء.']];
+(function(){const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while((n=w.nextNode())){const p=n.parentNode&&n.parentNode.nodeName;if(p==='SCRIPT'||p==='STYLE'||p==='TEXTAREA')continue;TXR.forEach(([a,b])=>{if(n.nodeValue.indexOf(a)>-1)n.nodeValue=n.nodeValue.split(a).join(b)})}})();
 
 /* ---------- التهيئة بعد اكتمال تحميل البيانات الأصلي ---------- */
 (async function init(){try{

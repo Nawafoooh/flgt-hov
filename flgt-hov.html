@@ -767,7 +767,7 @@ R=function(){const l=filt();
 /* 5) حفظ الإجراء: يحفظ علامات الصياغة الآلية، ويختم تاريخ التحديث */
 sv=function(e){e.preventDefault();const fd=new FormData($('fm')),o={id:cur?cur.id:uid()};
   F.forEach(([k,,t])=>{if(t!='m')o[k]=(fd.get(k)||'').toString().trim()});o.methods=fd.getAll('m');o.files=files;o.progress=Math.round(+o.progress||0);
-  if(cur){['rw','rx'].forEach(k=>{if(cur[k])o[k]=cur[k]});o.ed=1}
+  if(cur){['rw','rx'].forEach(k=>{if(cur[k])o[k]=cur[k]});if(cur.ed||cur.name!==o.name||cur.need!==o.need||cur.steps!==o.steps)o.ed=1}
   const ue=$('up_ev');if(ue){if(ue.value==='1'&&!o.evidence)o.evidence=EVY;else if(ue.value==='0'&&o.evidence===EVY)o.evidence=''}
   o.upd=todayISO();
   const er=chk(o);if(er){alert(er);return false}
@@ -823,11 +823,11 @@ RM=function(){const sel=$('rs');if(!sel||!$('rt'))return;const cu=sel.value,rs=[
   const rk=a=>(isLate(a)?2:0)+(miss(a).length?1:0);
   $('rt').innerHTML=cu?l.slice().sort((a,b)=>rk(b)-rk(a)).map(a=>'<tr class="up-q"><td>'+nm(a)+'</td><td>'+h(a.domain)+'</td><td><select onchange="up_qu(\''+a.id+'\',\'status\',this.value)">'+S.map(x=>'<option'+(x==a.status?' selected':'')+'>'+x+'</option>').join('')+'</select></td><td><input type="number" min="0" max="100" style="width:80px" value="'+a.progress+'" onchange="up_qu(\''+a.id+'\',\'progress\',this.value)"></td><td><select onchange="up_qu(\''+a.id+'\',\'ev\',this.value)"><option value="0">لا</option><option value="1"'+(hasEv(a)?' selected':'')+'>نعم</option></select></td><td>'+dueCell(a)+'</td><td>'+tdu(a)+'</td><td><select onchange="up_move(\''+a.id+'\',this.value)"><option value="">نقل إلى…</option>'+roleList().filter(r=>r!==cu).map(r=>'<option>'+h(r)+'</option>').join('')+'</select></td><td><button class="b s" onclick="edit(\''+a.id+'\')">تحديث كامل</button></td></tr>').join(''):'<tr><td colspan="9">اختر دورًا لعرض إجراءاته.</td></tr>'};
 window.up_qu=function(id,k,v){const a=A.find(x=>x.id==id);if(!a)return;const old={status:a.status,progress:a.progress,start:a.start,end:a.end,upd:a.upd,evidence:a.evidence};
-  if(k==='ev'){if(v==='1'){if(!(a.evidence||'').trim())a.evidence=EVY}else a.evidence='';a.upd=todayISO();a.ed=1;save();dash();toast('تم تحديث الشاهد');return}
+  if(k==='ev'){if(v==='1'){if(!(a.evidence||'').trim())a.evidence=EVY}else a.evidence='';a.upd=todayISO();save();dash();toast('تم تحديث الشاهد');return}
   if(k==='status')a.status=v;else a.progress=v;
   syncSP(a,k);autoDates(a);const e=chk(a);
   if(e){Object.assign(a,old);toast(e);RM();return}
-  a.upd=todayISO();a.ed=1;save();dash();toast('تم تحديث «'+short(a.name)+'»')};
+  a.upd=todayISO();save();dash();toast('تم تحديث «'+short(a.name)+'»')};
 
 /* ---------- لوحة المتابعة (تُضاف إلى لوحة المؤشرات) ---------- */
 function pulse(){const el=(CFG.ps&&CFG.pe&&CFG.pe>CFG.ps)?Math.round(Math.min(100,Math.max(0,dd(CFG.ps,todayISO())/dd(CFG.ps,CFG.pe)*100))):0;
@@ -932,7 +932,7 @@ function fillRoles(){const sel=$('up_br');if(!sel)return;const v=sel.value;sel.i
 function updSel(){const e=$('up_sc');if(e)e.textContent='المحدد: '+SEL.size;const a=$('up_all');if(a){const l=filt();a.checked=l.length>0&&l.every(x=>SEL.has(x.id))}}
 window.up_sel=function(id,on){if(on)SEL.add(id);else SEL.delete(id);updSel()};
 window.up_selAll=function(on){if(on)filt().forEach(a=>SEL.add(a.id));else SEL.clear();R()};
-function setOwner(a,list){const t=[];list.forEach(x=>{if(x&&!t.includes(x))t.push(x)});a.owner=t.join('، ');a.upd=todayISO();a.ed=1}
+function setOwner(a,list){const t=[];list.forEach(x=>{if(x&&!t.includes(x))t.push(x)});a.owner=t.join('، ');a.upd=todayISO()}
 window.up_bulk=function(mode){const r=$('up_br').value,l=A.filter(a=>SEL.has(a.id));
   if(!l.length){toast('حدّد إجراءً واحدًا على الأقل.');return}if(!r){toast('اختر المسؤول.');return}
   const txt=mode==='set'?'سيصبح «'+r+'» المسؤول الوحيد عن':mode==='add'?'سيُضاف «'+r+'» مسؤولًا عن':'سيُزال «'+r+'» من مسؤولية';
@@ -973,6 +973,7 @@ const TXR=[['لجنة التميز','فريق التميز'],['أرفق الشو
   let ch=fixNL();
   A.forEach(a=>{if(a.due===undefined){a.due='';ch=true}if(a.upd===undefined){a.upd='';ch=true}});
   if(stabilize())ch=true;
+  if(!CFG.edfix){let n=0;A.forEach(a=>{if(a.ed&&!a.rw&&RWD.some(d=>String(a.name||'').startsWith(d[0]))){delete a.ed;n++}});const c=RW()+RX();if(n||c)ch=true;CFG.edfix=1}
   if((CFG.roles||0)<2){if(fixRoles(A))ch=true;CFG.roles=2}
   if(ch)save();saveCfg();
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}

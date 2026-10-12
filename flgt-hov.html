@@ -918,6 +918,15 @@ window.up_sugT=function(){const rows=EV.filter(r=>r[4]<90&&!(T[r[0]]&&T[r[0]].t!
   rows.forEach(r=>{const s=r[4],nx=s<50?50:s<75?75:90;T[r[0]]=T[r[0]]||{};T[r[0]].t=Math.max(nx,Math.ceil(s)+(Number.isInteger(s)?1:0))});
   saveT();dash();toast('اقتُرحت المستهدفات لـ '+rows.length+' بندًا.')};
 
+/* ---------- جاهزية الإجراءات للاعتماد (تبويب تجهيز منصة تميز) ---------- */
+const EVPLAN=/توثيق|شواهد|الشواهد|أدلة|الأدلة/;
+ck=function(a){const r=evOf(a),f=fit(a),t=r&&T[r[0]]&&T[r[0]].t,
+  tgt=t!=null||(a.kind==='استدامة'&&!!r&&r[4]>=90),
+  ev=hasEv(a)||EVPLAN.test(a.steps||'');
+  const it=[['بند التقويم/المستوى غير محدد',!!r],['لغة الإجراء لا تناسب المستوى',f?f.ok!==false:false],['وصف الاحتياج',!!(a.need||'').trim()],['الإجراء غير محدد',(a.goal||a.name||'').trim().length>10],['خطوات آلية التنفيذ',!!(a.steps||'').trim()],['المسؤول',!!(a.owner||'').trim()],['مدة الإنجاز',!!((a.duration||'').trim()||(a.start&&a.end))],['المستهدف القابل للقياس',tgt],['الأدلة (شاهد موجود أو توثيق مخطط في الآليات)',ev]];
+  return{n:it.filter(x=>x[1]).length,miss:it.filter(x=>!x[1]).map(x=>x[0])}};
+const _bx=bx;bx=function(r){const rows=_bx(r);if(r[4]>=90&&rows[1]&&/لم تُحدَّد/.test(rows[1][1]))rows[1][1]='المحافظة على 90% فأكثر (النتيجة الحالية '+r[4]+'%)';return rows};
+
 /* ---------- تعديل الإسناد ---------- */
 function fillRoles(){const sel=$('up_br');if(!sel)return;const v=sel.value;sel.innerHTML=roleList().map(r=>'<option'+(r===v?' selected':'')+'>'+h(r)+'</option>').join('')}
 function updSel(){const e=$('up_sc');if(e)e.textContent='المحدد: '+SEL.size;const a=$('up_all');if(a){const l=filt();a.checked=l.length>0&&l.every(x=>SEL.has(x.id))}}
@@ -947,6 +956,7 @@ function mount(){if($('up_dash'))return;
   fillRoles();
   $('rs').parentElement.insertAdjacentHTML('beforeend','<button class="b s" type="button" onclick="up_mine()">طباعة مهامي</button><button class="b s" type="button" onclick="up_exUp()">تصدير ملف تحديثاتي</button>');
   $('msg').insertAdjacentHTML('beforebegin','<div class="note"><b>العمل الجماعي دون خادم:</b> يختار كل مسؤول دوره من «مهامي حسب الدور»، يحدّث حالة إجراءاته، ثم يضغط «تصدير ملف تحديثاتي» ويرسله لمن يتولى الدمج، فيستورده هنا بزر «دمج ملف تحديثات». يُعتمد الأحدث تاريخًا لكل إجراء، ولا يُمسّ ما عداه.</div><div class="tools"><label class="b" style="padding:7px 14px;cursor:pointer">دمج ملف تحديثات<input type="file" accept=".json" hidden onchange="up_merge(this)"></label></div>');
+  $('tz').querySelector('.note').insertAdjacentHTML('afterend','<div class="tools"><button class="b s" type="button" onclick="up_sugT()">اقتراح مستهدفات متدرجة للبنود دون 90%</button></div><div class="up-note">تُعدّ «الأدلة» متوافرة إذا حُدّد «يوجد شاهد» أو ورد التوثيق ضمن آليات التنفيذ (فالدليل يسأل عن أدلة يمكن جمعها أثناء التنفيذ). وبنود الاستدامة مستهدفها المحافظة على 90% فأكثر ما لم تحدّد غيره. أما بنود دون 90% فتحتاج مستهدفًا تحدده أنت أو تقبل اقتراح الدليل.</div>');
   $('ev').querySelector('.note').insertAdjacentHTML('afterend','<div class="tools"><button class="b s" type="button" onclick="up_sugT()">اقتراح مستهدفات متدرجة للبنود دون 90%</button></div>');
   document.body.insertAdjacentHTML('beforeend','<div id="up_toast" class="np" role="status" aria-live="polite"></div>')}
 mount();
@@ -973,4 +983,3 @@ const TXR=[['لجنة التميز','فريق التميز'],['أرفق الشو
 </script>
 </body>
 </html>
-
